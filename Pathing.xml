@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE MudletPackage>
+<MudletPackage version="1.001">
+	<TriggerPackage />
+	<TimerPackage />
+	<AliasPackage />
+	<ActionPackage />
+	<ScriptPackage>
+		<ScriptGroup isActive="yes" isFolder="yes">
+			<name>Pathing</name>
+			<packageName></packageName>
+			<script>pathing = pathing or {}</script>
+			<eventHandlerList />
+			<Script isActive="yes" isFolder="no">
+				<name>pathing.move</name>
+				<packageName></packageName>
+				<script>function pathing.move()
+  mmp.getPath(gmcp.Room.Info.num, pathing.walkpath[pathing.i])
+  if #speedWalkPath &gt; 5 then
+    send("path track "..pathing.walkpath[pathing.i])
+    tempTimer(2,function() mmp.gotoRoom(pathing.walkpath[pathing.i]) end)
+  else
+    mmp.gotoRoom(pathing.walkpath[pathing.i])
+  end
+end</script>
+				<eventHandlerList />
+			</Script>
+			<Script isActive="yes" isFolder="no">
+				<name>pathing.createPath</name>
+				<packageName></packageName>
+				<script>function pathing.start(areanum, start)
+  if not areanum then
+    _, areanum = pcall(getRoomArea, gmcp.Room.Info.num)
+  end
+  if not start then
+    start = gmcp.Room.Info.num
+  end
+  pathing.createPath(areanum, start)
+  pathing.enabled = true
+  pathing.auto = true
+  pathing.i = 1
+  pathing.move()
+end
+
+function pathing.createPath(areanum, start)
+  local visited, d, parent, children, max_depth, leaves = {}, {}, {}, {}, {}, {}
+  local roomlist, endresult = getAreaRooms(areanum) or {}, {}
+  d, parent, children = pathing.BFS(areanum, start)
+  leaves[roomlist[0]] = true
+  for _,v in ipairs(roomlist) do 
+    leaves[v] = true
+  end
+  for _,v in pairs(parent) do 
+    leaves[v] = nil
+  end
+  for leaf,_ in pairs(leaves) do
+    max_depth[leaf] = 1
+    while parent[leaf] do
+      if not max_depth[parent[leaf]] or max_depth[parent[leaf]] &lt;= max_depth[leaf] then
+        max_depth[parent[leaf]] = max_depth[leaf] + 1
+      end
+      leaf = parent[leaf]
+    end
+  end
+pathing.visited = {}
+pathing.lastroom = start
+pathing.walkpath = {}
+pathing.DFS(start,max_depth,roomlist)
+table.remove(pathing.walkpath,1)
+end
+
+function pathing.BFS(areanum, start)
+  local visited, d, parent, children = {}, {}, {}, {}
+  local roomlist, endresult = getAreaRooms(areanum) or {}, {}
+  d[start] = 0
+  visited[start] = true
+  local queue = {}
+  table.insert(queue, start)
+  while #queue &gt; 0 do
+    local u = queue[1]
+    table.remove(queue,1)
+    local exits = getRoomExits(u)
+    for i,v in pairs(exits) do
+      children[u] = children[u] or {}
+      table.insert(children[u], v)
+      if table.contains(roomlist,v) and not visited[v] then
+        visited[v] = true
+        parent[v] = u 
+        d[v] = d[u]+1 
+        table.insert(queue,v)
+      end
+    end
+    visited[u] = true
+  end
+  return d, parent, children
+end
+
+
+
+function pathing.DFS(start,max_depth,roomlist)
+  pathing.visited[start] = true
+  table.insert(pathing.walkpath,start)
+  pathing.lastroom = start
+  local exits = {}
+  local sortedExits = {}
+  local count = 0
+  for i,v in pairs(getRoomExits(start)) do 
+    if i ~= "x" and table.contains(roomlist,v) then
+      exits[v] = true
+      count = count + 1
+    end
+  end
+  while count &gt; 0 do 
+    local depth = 100000
+    local shallowest
+    for exit,_ in pairs(exits) do 
+      if max_depth[exit] &lt; depth then 
+        shallowest = exit 
+        depth = max_depth[exit]
+      end
+    end
+    table.insert(sortedExits,shallowest)
+    exits[shallowest] = nil
+    count = count - 1
+  end
+    for i,v in pairs(sortedExits) do 
+    if not pathing.visited[v] then
+      pathing.DFS(v,max_depth,roomlist)
+    end
+  end
+end</script>
+				<eventHandlerList />
+			</Script>
+			<Script isActive="yes" isFolder="no">
+				<name>pathing.moved</name>
+				<packageName></packageName>
+				<script>function pathing.moved()
+  if pathing.oldroom ~= gmcp.Room.Info.num then
+    pathing.oldroom = gmcp.Room.Info.num
+    raiseEvent("pathing moved room")
+  end
+end</script>
+				<eventHandlerList>
+					<string>gmcp.Room.Info</string>
+				</eventHandlerList>
+			</Script>
+			<Script isActive="yes" isFolder="no">
+				<name>pathing.autoMove</name>
+				<packageName></packageName>
+				<script>function pathing.autoMove()
+  if pathing.enabled and pathing.auto then
+    pathing.move()
+  end
+end</script>
+				<eventHandlerList>
+					<string>pathing arrived</string>
+				</eventHandlerList>
+			</Script>
+			<Script isActive="yes" isFolder="no">
+				<name>pathing.arrived</name>
+				<packageName></packageName>
+				<script>function pathing.arrived()
+  if pathing.enabled and gmcp.Room.Info.num == pathing.walkpath[pathing.i] then
+    pathing.i = pathing.i + 1
+    if pathing.command then expandAlias(pathing.command) end
+    tempPromptTrigger([[raiseEvent("pathing arrived")]], 1)
+  end
+end</script>
+				<eventHandlerList>
+					<string>mmapper arrived</string>
+				</eventHandlerList>
+			</Script>
+		</ScriptGroup>
+	</ScriptPackage>
+	<KeyPackage />
+	<VariablePackage>
+		<HiddenVariables />
+	</VariablePackage>
+</MudletPackage>
